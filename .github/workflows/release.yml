@@ -1,0 +1,62 @@
+name: Build and publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Validate Python sources
+        run: |
+          python -m py_compile main.py iphone_smb_gui.py
+
+      - name: Build one-file GUI executable
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name IphoneShareManager iphone_smb_gui.py
+
+      - name: Create SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = Get-FileHash -Path dist\IphoneShareManager.exe -Algorithm SHA256
+          "$($hash.Hash)  IphoneShareManager.exe" | Out-File -FilePath dist\IphoneShareManager.exe.sha256 -Encoding ascii
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IphoneShareManager-windows
+          path: |
+            dist/IphoneShareManager.exe
+            dist/IphoneShareManager.exe.sha256
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "IphoneShareManager ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            dist/IphoneShareManager.exe
+            dist/IphoneShareManager.exe.sha256
